@@ -10,19 +10,18 @@ SYSTEM_THREAD(ENABLED);
 // Show system, cloud connectivity, and application logs over USB
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
 
-// Pins to RGB LED 
+// Pins to ryg (red, yellow, green)
 int pinR = D0;
-int pinG = D1;
-// Use D2 for blue channel
-int pinB = D2;
+int pinY = D1;
+int pinG = D2;
 
 
-// Helper to write RGB values while handling common-anode inversion
-void writeRGB(int r, int g, int b) {
+// Helper to write RYG values while handling common-anode inversion
+void writeRYG(int r, int y, int g) {
   if (commonAnode) {
     r = 255 - r;
+    y = 255 - y;
     g = 255 - g;
-    b = 255 - b;
   }
   // If value is full-on or full-off, use digitalWrite for reliability
   auto writeChannel = [](int pin, int value) {
@@ -36,8 +35,8 @@ void writeRGB(int r, int g, int b) {
   };
 
   writeChannel(pinR, r);
+  writeChannel(pinY, y);
   writeChannel(pinG, g);
-  writeChannel(pinB, b);
 }
 
 // Current operating mode (1..4). Default to Mode 1 (All ON)
@@ -51,7 +50,7 @@ void modeSmoothCycle();
 void modeAlertFlash();
 void modePartyMode();
 // Helper utilities
-void hsvToRgb(float h, float s, float v, int &outR, int &outG, int &outB);
+void hsvToRyg(float h, float s, float v, int &outR, int &outY, int &outG);
 bool checkSerialForModeChange();
 
 
@@ -65,7 +64,7 @@ void setup() {
   // Configure pins as outputs
   pinMode(pinR, OUTPUT);
   pinMode(pinG, OUTPUT);
-  pinMode(pinB, OUTPUT);
+  pinMode(pinY, OUTPUT);
 
   Serial.begin(115200);
   while(!Serial && millis() < 2000) {
@@ -110,7 +109,7 @@ void modeAllOn() {
     init = true;
   }
 
-  writeRGB(255,255,255);
+  writeRYG(255,255,255);
 
 
   if (currentMode != 1) init = false;
@@ -134,9 +133,9 @@ void modeSmoothCycle() {
   unsigned long now = millis();
   if (now - last >= stepDelay) {
     last = now;
-    int r,g,b;
-    hsvToRgb(hue, 1.0f, 1.0f, r, g, b);
-    writeRGB(r,g,b);
+    int r,y,g;
+    hsvToRyg(hue, 1.0f, 1.0f, r, y, g);
+    writeRYG(r,y,g);
     hue += hueStep;
     if (hue >= 360.0f) hue -= 360.0f;
   }
@@ -163,10 +162,10 @@ void modeAlertFlash() {
   if (now >= nextToggle) {
     stateOn = !stateOn;
     if (stateOn) {
-      writeRGB(255,255,255);
+      writeRYG(255,255,255);
       nextToggle = now + onTime;
     } else {
-      writeRGB(0,0,0);
+      writeRYG(0,0,0);
       nextToggle = now + offTime;
     }
   }
@@ -181,8 +180,8 @@ void modePartyMode() {
   static const float bpm = 120.0f;
   static const unsigned long beatMs = (unsigned long)(60000.0f / bpm);
   static unsigned long beatStart = 0;
-  static int r0=0,g0=0,b0=0;
-  static int r1=0,g1=0,b1=0;
+  static int r0=0,y0=0,g0=0;
+  static int r1=0,y1=0,g1=0;
 
   if (!init) {
     Log.info("Mode 4: Party mode (random colors on beat)");
@@ -196,8 +195,8 @@ void modePartyMode() {
   unsigned long elapsed = now - beatStart;
   if (elapsed >= beatMs) {
     // shift colors and pick new target
-    r0 = r1; g0 = g1; b0 = b1;
-    r1 = random(0,256); g1 = random(0,256); b1 = random(0,256);
+    r0 = r1; y0 = y1; g0 = g1;
+    r1 = random(0,256); y1 = random(0,256); g1 = random(0,256);
     beatStart = now;
     elapsed = 0;
   }
@@ -205,8 +204,8 @@ void modePartyMode() {
   float t = (float)elapsed / (float)beatMs;
   int rc = (int)((1.0f - t) * r0 + t * r1);
   int gc = (int)((1.0f - t) * g0 + t * g1);
-  int bc = (int)((1.0f - t) * b0 + t * b1);
-  writeRGB(rc,gc,bc);
+  int yc = (int)((1.0f - t) * y0 + t * y1);
+  writeRYG(rc,yc,gc);
 
   if (currentMode != 4) init = false;
 }
@@ -256,27 +255,27 @@ void enterMode(int mode) {
     // Ensure pins are outputs
     pinMode(pinR, OUTPUT);
     pinMode(pinG, OUTPUT);
-    pinMode(pinB, OUTPUT);
+    pinMode(pinY, OUTPUT);
     if (commonAnode) {
       // common-anode: drive LOW to turn LED on
       digitalWrite(pinR, LOW);
+      digitalWrite(pinY, LOW);
       digitalWrite(pinG, LOW);
-      digitalWrite(pinB, LOW);
     } else {
       // common-cathode: drive HIGH to turn LED on
       digitalWrite(pinR, HIGH);
+      digitalWrite(pinY, HIGH);
       digitalWrite(pinG, HIGH);
-      digitalWrite(pinB, HIGH);
     }
     // Also set PWM/full value for boards that use analogWrite
-    writeRGB(255,255,255);
+    writeRYG(255,255,255);
   } else {
     // For other modes we don't need immediate action here.
   }
 }
 
-// Convert HSV (h in degrees 0..360, s,v in 0..1) to RGB 0..255
-void hsvToRgb(float h, float s, float v, int &outR, int &outG, int &outB) {
+  // Convert HSV (h in degrees 0..360, s,v in 0..1) to RYG 0..255
+void hsvToRyg(float h, float s, float v, int &outR, int &outY, int &outG) {
   float c = v * s;
   float hh = fmodf(h / 60.0f, 6.0f);
   float x = c * (1 - fabsf(fmodf(hh,2.0f) - 1));
@@ -292,5 +291,6 @@ void hsvToRgb(float h, float s, float v, int &outR, int &outG, int &outB) {
 
   outR = (int)((r + m) * 255.0f);
   outG = (int)((g + m) * 255.0f);
-  outB = (int)((b + m) * 255.0f);
+  // map previous blue output into yellow channel variable name
+  outY = (int)((b + m) * 255.0f);
 }
